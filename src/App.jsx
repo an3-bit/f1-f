@@ -16,6 +16,7 @@ import Testimonials from './pages/Testimonial/Testimonials';
 import Test from './pages/Test/Test';
 import ClientDetails from './pages/Client_details/ClientDetails';
 import ClientDetailsPage from './pages/Client_details/ClientDetailsPage';
+import RecommendationsPage from './pages/dashboard/assessment/RecommendationsPage';
 
 import Quote2 from './pages/Quote2/Quote2';
 import ProposalTemplate from './pages/dashboard/proposal/proposaltemplate';
@@ -48,6 +49,7 @@ const Layout = ({ children }) => {
     '/review-assessment',
     '/solar-system-expansion-planner',
     '/proposal-template'
+    
     
 
   ];
@@ -117,6 +119,7 @@ const App = () => (
         <Route path="/review-assessment" element={<ReviewAssessmentPage />} />
         <Route path="/solar-system-expansion-planner" element={<SolarSystemExpansionPlanner />} />
         <Route path="/proposal-template" element={<ProposalTemplate />} />
+        <Route path="/recommendations" element={<RecommendationsPage />} />
         
         {/* Catch-all Route */}
 
