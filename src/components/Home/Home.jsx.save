@@ -1,0 +1,39 @@
+import React from 'react'
+import Hero from '../hero/Hero'
+import Bhero from '../Bhero/Bhero'
+import Ready from '../Ready/Ready'
+<<<<<<< HEAD
+import Testimonials from '../../pages/Testimonial/Testimonials'
+=======
+import Testimonials from "../../pages/Testimonial/Testimonials";
+import { useEffect } from 'react';
+import ProductManual from '../../pages/Product_manual/product_manual';
+
+
+>>>>>>> 83646bc (added product manual, implemented functionality for all buttons,)
+
+
+
+const Home = () => {
+  return (
+    <div>
+<<<<<<< HEAD
+      <Hero />
+      <Bhero />
+      < Testimonials />
+      <Ready />
+=======
+<Hero/>
+<Bhero/>
+<ProductManual/>
+<Testimonials/>
+<Ready/>
+>>>>>>> 83646bc (added product manual, implemented functionality for all buttons,)
+
+    </div>
+  )
+}
+
+export default Home
+
+
