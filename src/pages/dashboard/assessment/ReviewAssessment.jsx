@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, ArrowRight, User, Building, Droplet, Sun, CircleHelp } from 'lucide-react';
+import { CheckCircle, ArrowRight, User, Building, Droplet, Sun, CircleHelp, Settings as SettingsIcon, LogOut } from 'lucide-react';
 
 export default function AssessmentReview() {
   const navigate = useNavigate();
@@ -12,6 +12,8 @@ export default function AssessmentReview() {
     occupancy: false,
     waterQuality: false
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Calculate completion percentage based on completed sections
   const completion = Math.round(
@@ -85,60 +87,99 @@ export default function AssessmentReview() {
     navigate(path);
   };
 
-  const handleGenerateRecommendations = () => {
-    // Save full assessment data in one place for recommendations
-    const assessmentData = {
-      client: clientData,
-      occupancy: occupancyData,
-      waterQuality: waterQualityData,
-      completedAt: new Date().toISOString()
-    };
-    
-    localStorage.setItem('fullAssessmentData', JSON.stringify(assessmentData));
-    
-    // Navigate to recommendations page
-    navigate('/recommendations');
-  };
-   const [userName, setUserName] = useState('');
-    const [userInitials, setUserInitials] = useState('');
-    const [showUserMenu, setShowUserMenu] = useState(false);
-    
-    useEffect(() => {
-      // Check if user is logged in and get user data from localStorage
-      const name = localStorage.getItem('userName');
-      if (name) {
-        setUserName(name);
-        // Create initials from name (e.g. John Doe -> JD)
-        const initials = name
-          .split(' ')
-          .map(part => part[0])
-          .join('')
-          .toUpperCase();
-        setUserInitials(initials);
-      } else {
-        // Redirect to login if not logged in
-        navigate('/login', { replace: true });
-      }
-    }, [navigate]);
-    
-    const handleSignOut = () => {
-      // Clear authentication data
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('userEmail');
-      localStorage.removeItem('userType');
+  const handleGenerateRecommendations = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
       
-      // Redirect to login page
-      navigate('/', { replace: true });
-    };
-  
-    const toggleUserMenu = () => {
-      setShowUserMenu(!showUserMenu);
-    };
+      // Prepare the data for the API endpoint
+      const recommendationData = {
+        propertyType: occupancyData?.buildingType || "Residential",
+        occupants: occupancyData?.occupants || "4",
+        budget: clientData?.budget || "Medium",
+        location: clientData?.location || "Urban",
+        existingSystem: clientData?.existingSystem || "None",
+        timeline: clientData?.timeline || "3-6 months",
+        waterSource: waterQualityData?.source || "Municipal Water",
+        electricitySource: clientData?.electricitySource || "Grid"
+      };
+      
+      // Make the API call
+      const response = await fetch('https://f1-backend-t9zk.onrender.com/api/recommend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(recommendationData),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+      
+      const recommendationResult = await response.json();
+      
+      // Save both the request data and the response
+      const assessmentData = {
+        client: clientData,
+        occupancy: occupancyData,
+        waterQuality: waterQualityData,
+        recommendationRequest: recommendationData,
+        recommendationResponse: recommendationResult,
+        completedAt: new Date().toISOString()
+      };
+      
+      localStorage.setItem('fullAssessmentData', JSON.stringify(assessmentData));
+      
+      // Navigate to recommendations page
+      navigate('/recommendations');
+    } catch (err) {
+      console.error("Error generating recommendations:", err);
+      setError("Failed to generate recommendations. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const [userName, setUserName] = useState('');
+  const [userInitials, setUserInitials] = useState('');
+  const [showUserMenu, setShowUserMenu] = useState(false);
     
-   
-    const goToProfile = () => navigate('/profile');
-    const goToSettings = () => navigate('/settings');
+  useEffect(() => {
+    // Check if user is logged in and get user data from localStorage
+    const name = localStorage.getItem('userName');
+    if (name) {
+      setUserName(name);
+      // Create initials from name (e.g. John Doe -> JD)
+      const initials = name
+        .split(' ')
+        .map(part => part[0])
+        .join('')
+        .toUpperCase();
+      setUserInitials(initials);
+    } else {
+      // Redirect to login if not logged in
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
+    
+  const handleSignOut = () => {
+    // Clear authentication data
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('userType');
+    
+    // Redirect to login page
+    navigate('/', { replace: true });
+  };
+  
+  const toggleUserMenu = () => {
+    setShowUserMenu(!showUserMenu);
+  };
+    
+  const goToProfile = () => navigate('/profile');
+  const goToSettings = () => navigate('/settings');
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -280,15 +321,22 @@ export default function AssessmentReview() {
                 <CircleHelp className="h-5 w-5 text-gray-500" />
               </button>
               <button 
-                className="bg-black text-white px-4 py-2 rounded flex items-center"
+                className={`bg-black text-white px-4 py-2 rounded flex items-center ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                 onClick={handleGenerateRecommendations}
-                disabled={completion < 100}
+                disabled={completion < 100 || isLoading}
               >
-                Generate Recommendations
-                <ArrowRight className="ml-2 h-4 w-4" />
+                {isLoading ? 'Generating...' : 'Generate Recommendations'}
+                {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
               </button>
             </div>
           </div>
+
+          {/* Error message if API call fails */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <p className="text-red-700">{error}</p>
+            </div>
+          )}
 
           {/* Main Grid Layout */}
           <div className="grid grid-cols-4 gap-6">
@@ -360,14 +408,14 @@ export default function AssessmentReview() {
                 
                 <button 
                   className={`w-full py-3 rounded mt-6 ${
-                    completion === 100 
+                    completion === 100 && !isLoading
                       ? 'bg-black text-white' 
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
-                  disabled={completion < 100}
+                  disabled={completion < 100 || isLoading}
                   onClick={handleGenerateRecommendations}
                 >
-                  {completion === 100 ? 'Generate Recommendations' : 'Complete All Sections'}
+                  {isLoading ? 'Processing...' : completion === 100 ? 'Generate Recommendations' : 'Complete All Sections'}
                 </button>
               </div>
               
@@ -378,7 +426,7 @@ export default function AssessmentReview() {
                     <User className="h-6 w-6 text-gray-600" />
                   </div>
                   <div>
-                    <div className="font-bold">John Doe</div>
+                    <div className="font-bold">{userName || 'John Doe'}</div>
                     <div className="text-sm text-gray-500">Residential Solutions</div>
                   </div>
                 </div>
@@ -434,6 +482,18 @@ export default function AssessmentReview() {
                       <h4 className="font-bold">{clientData.name}</h4>
                       <p className="text-sm text-gray-500">{clientData.email || "No email provided"}</p>
                       <p className="text-sm text-gray-500">{clientData.details}</p>
+                      {clientData.budget && (
+                        <p className="text-sm text-gray-500 mt-1">Budget: {clientData.budget}</p>
+                      )}
+                      {clientData.location && (
+                        <p className="text-sm text-gray-500">Location: {clientData.location}</p>
+                      )}
+                      {clientData.existingSystem && (
+                        <p className="text-sm text-gray-500">Existing System: {clientData.existingSystem}</p>
+                      )}
+                      {clientData.timeline && (
+                        <p className="text-sm text-gray-500">Timeline: {clientData.timeline}</p>
+                      )}
                     </div>
                   ) : (
                     <div className="mb-5 text-gray-500">
@@ -460,7 +520,7 @@ export default function AssessmentReview() {
                   
                   {occupancyData ? (
                     <div className="mb-5">
-                      <h4 className="font-bold">{occupancyData.buildingType}</h4>
+                      <h4 className="font-bold">{occupancyData.buildingType || 'Residential'}</h4>
                       <p className="text-sm text-gray-500">{occupancyData.occupants} occupants</p>
                       <p className="text-sm text-gray-600 font-medium mt-2">
                         {occupancyData.waterDemand} liters daily demand
@@ -525,11 +585,12 @@ export default function AssessmentReview() {
                       </p>
                       
                       <button 
-                        className="bg-black text-white px-6 py-3 rounded flex items-center mt-4"
+                        className={`bg-black text-white px-6 py-3 rounded flex items-center mt-4 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                         onClick={handleGenerateRecommendations}
+                        disabled={isLoading}
                       >
-                        Generate Recommendations
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        {isLoading ? 'Generating...' : 'Generate Recommendations'}
+                        {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
                       </button>
                     </div>
                   </div>
@@ -596,9 +657,17 @@ export default function AssessmentReview() {
                             {waterQualityData?.source === "Borehole Water" ? "Indirect" : "Direct"}
                           </span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between mb-2">
                           <span className="text-gray-600">Building Type:</span>
                           <span className="font-medium">{occupancyData?.buildingType || 'Not specified'}</span>
+                        </div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-gray-600">Budget:</span>
+                          <span className="font-medium">{clientData?.budget || 'Medium'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Timeline:</span>
+                          <span className="font-medium">{clientData?.timeline || '3-6 months'}</span>
                         </div>
                       </div>
                     </div>
