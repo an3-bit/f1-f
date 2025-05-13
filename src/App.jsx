@@ -48,7 +48,8 @@ const Layout = ({ children }) => {
     '/proposal-generation',
     '/review-assessment',
     '/solar-system-expansion-planner',
-    '/proposal-template'
+    '/proposal-template',
+    '/recommendations'
     
     
 

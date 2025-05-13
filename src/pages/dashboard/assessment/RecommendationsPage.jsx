@@ -186,7 +186,7 @@ export default function RecommendationsPage() {
                     </svg>
                   </div>
                 </div>
-                <span className="font-medium text-lg text-white">AquaSol</span>
+                <span className="font-medium text-lg text-white">AI Solar Water Dashboard</span>
               </div>
             </div>
             
@@ -714,56 +714,7 @@ export default function RecommendationsPage() {
       </main>
       
       {/* Footer */}
-      <footer className="bg-gray-800 text-white px-4 py-8">
-        <div className="container mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
-              <h3 className="text-lg font-bold mb-4">AquaSol</h3>
-              <p className="text-gray-400 text-sm">
-                Leading provider of solar water heating solutions in East Africa since 2023.
-              </p>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-bold mb-4">Contact</h3>
-              <ul className="text-gray-400 text-sm space-y-2">
-                <li>Email: info@aquasol.co.ke</li>
-                <li>Phone: +254 (0) 722 123 456</li>
-                <li>Address: Nairobi, Kenya</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-bold mb-4">Links</h3>
-              <ul className="text-gray-400 text-sm space-y-2">
-                <li><a href="#" className="hover:text-white">About Us</a></li>
-                <li><a href="#" className="hover:text-white">Products</a></li>
-                <li><a href="#" className="hover:text-white">Installation</a></li>
-                <li><a href="#" className="hover:text-white">Support</a></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-bold mb-4">Newsletter</h3>
-              <p className="text-gray-400 text-sm mb-4">Subscribe to our newsletter for updates</p>
-              <div className="flex">
-                <input 
-                  type="email" 
-                  placeholder="Your email" 
-                  className="bg-gray-700 text-white px-3 py-2 rounded-l text-sm flex-grow"
-                />
-                <button className="bg-blue-600 px-3 py-2 rounded-r text-sm">
-                  Subscribe
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div className="border-t border-gray-700 mt-8 pt-6 text-center text-gray-400 text-sm">
-            <p>&copy; {new Date().getFullYear()} AquaSol. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      
     </div>
   );
 }
