@@ -1,26 +1,241 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import logo2 from "../../assets/logobg.png";
 import quoteback from "../../assets/quotebackpng.png";
-
 import ultrasun from "../../assets/ultrasun.jpg";
 
-const quote2 = () => {
+const Quote2 = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { selectedSystem } = location.state || {};
+  const [quotationData, setQuotationData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    const fetchQuotation = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Check for directly passed data from the recommendations page
+        const backendData = location.state?.quoteData;
+        const selectedSystem = location.state?.selectedSystem;
+        
+        // Get system data from location state or localStorage
+        const systemFromState = selectedSystem || location.state?.selectedSystem;
+        const systemFromStorage = localStorage.getItem('recommendedSystem');
+        const systemData = systemFromState || (systemFromStorage ? JSON.parse(systemFromStorage) : null);
+        
+        if (!systemData) {
+          throw new Error("No system selected");
+        }
+        
+        // Get user data from localStorage
+        const userName = localStorage.getItem('userName') || location.state?.userName || "Client Name";
+        const userPhone = localStorage.getItem('userPhone') || location.state?.userPhone || "254768372439";
+        const userEmail = localStorage.getItem('userEmail') || location.state?.userEmail || "client.email@example.com";
+        const userLocation = localStorage.getItem('userLocation') || location.state?.userLocation || "Your Location";
+        
+        // If we have data directly from the recommendations page via state
+        if (backendData) {
+          // Use the API response to format our quotation
+          const formattedQuotation = formatQuotationData(backendData, systemData, userName, userPhone, userEmail, userLocation);
+          setQuotationData(formattedQuotation);
+          setIsLoading(false);
+          return;
+        }
+        
+        // If no data was passed directly, try to make an API call
+        // Prepare request data
+        const requestData = {
+          product_number: systemData.model || systemData.productNumber || "UFS300I",
+          phone_number: userPhone,
+          name: userName
+        };
+        
+        // Make API request to get quotation
+        const response = await fetch('http://127.0.0.1:8000/erp/quotation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Process the quotation data
+        const formattedQuotation = formatQuotationData(data, systemData, userName, userPhone, userEmail, userLocation);
+        setQuotationData(formattedQuotation);
+      } catch (err) {
+        console.error("Error fetching quotation:", err);
+        setError(err.message);
+        
+        // Fallback to generating local quotation if API fails
+        const systemFromStorage = localStorage.getItem('recommendedSystem');
+        const systemFromState = location.state?.selectedSystem;
+        const systemData = systemFromState || (systemFromStorage ? JSON.parse(systemFromStorage) : null);
+        
+        if (systemData) {
+          // Get user data for fallback
+          const userName = localStorage.getItem('userName') || location.state?.userName || "Client Name";
+          const userPhone = localStorage.getItem('userPhone') || location.state?.userPhone || "254768372439";
+          const userEmail = localStorage.getItem('userEmail') || location.state?.userEmail || "client.email@example.com";
+          const userLocation = localStorage.getItem('userLocation') || location.state?.userLocation || "Your Location";
+          
+          const localQuotation = generateLocalQuotation(systemData, userName, userPhone, userEmail, userLocation);
+          setQuotationData(localQuotation);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchQuotation();
+  }, [location.state]);
 
-  // Handle case where no system is selected
-  if (!selectedSystem) {
+  // Format the quotation data from API response
+  const formatQuotationData = (apiData, systemData, userName, userPhone, userEmail, userLocation) => {
+    // Extract the product info from the API response
+    const product = apiData.product || {};
+    
+    // Use provided client info or fallback to localStorage values
+    const clientName = userName || apiData.client_name || "Client Name";
+    const clientEmail = userEmail || "client.email@example.com";
+    const clientPhone = userPhone || apiData.phone_number || "254768372439";
+    const clientLocation = userLocation || "Your Location";
+    
+    // Calculate component costs based on system price
+    const baseCost = product.Unit_Price || systemData.price || 0;
+    const collectorCost = Math.round(baseCost * 0.6);
+    const tankCost = Math.round(baseCost * 0.3);
+    const installationKit = Math.round(baseCost * 0.1);
+    
+    return {
+      id: apiData.quotation_id || `QUO-${Math.floor(Math.random() * 9000 + 1000)}`,
+      date: new Date().toLocaleDateString('en-GB'),
+      clientName: clientName,
+      clientEmail: clientEmail,
+      clientPhone: clientPhone,
+      clientLocation: clientLocation,
+      solarSystem: product.Description || systemData.model || "Solar Heating System",
+      model: product.Product_Model || systemData.modelCode || systemData.model || "SHW",
+      systemDescription: systemData.description || "High-efficiency solar heating system",
+      technicianRequired: true,
+      warranty: systemData.warranty || "5 years",
+      imageType: (product.Description || systemData.model || "").includes("Ultrasun") ? "Ultrasun F2" : "Other",
+      specifications: {
+        collector_type: systemData.collectorType || "Standard",
+        capacity: systemData.tankSize || systemData.capacity || "Standard",
+        suitable_for: systemData.peopleCapacity || "Standard household"
+      },
+      components: [
+        { 
+          name: "Solar Collector", 
+          quantity: 1, 
+          unitPrice: collectorCost,
+          description: systemData.collectorType || "High-performance collector"
+        },
+        { 
+          name: "Storage Tank", 
+          quantity: 1, 
+          unitPrice: tankCost,
+          description: `${systemData.tankSize || systemData.capacity || 'Standard'} capacity tank`
+        },
+        { 
+          name: "Installation Kit", 
+          quantity: 1, 
+          unitPrice: installationKit,
+          description: "Complete installation package"
+        }
+      ],
+      quotationText: apiData.quotation_text || ""
+    };
+  };
+
+  // Generate a local quotation as fallback if API call fails
+  const generateLocalQuotation = (selectedSystem, userName, userPhone, userEmail, userLocation) => {
+    if (!selectedSystem) return null;
+    
+    // Use provided client info or fallback to defaults
+    const clientName = userName || "Client Name";
+    const clientEmail = userEmail || "client.email@example.com";
+    const clientPhone = userPhone || "254768372439";
+    const clientLocation = userLocation || "Your Location";
+    
+    // Calculate component costs based on system price
+    const baseCost = selectedSystem.price || 0;
+    const collectorCost = Math.round(baseCost * 0.6);
+    const tankCost = Math.round(baseCost * 0.3);
+    const installationKit = Math.round(baseCost * 0.1);
+    
+    return {
+      id: `QUO-${Math.floor(Math.random() * 9000 + 1000)}`,
+      date: new Date().toLocaleDateString('en-GB'),
+      clientName: clientName,
+      clientEmail: clientEmail,
+      clientPhone: clientPhone,
+      clientLocation: clientLocation,
+      solarSystem: selectedSystem.model || "Solar Heating System",
+      model: selectedSystem.modelCode || selectedSystem.productNumber || selectedSystem.model || "Standard Model",
+      systemDescription: selectedSystem.description || "High-efficiency solar heating system",
+      technicianRequired: true,
+      warranty: selectedSystem.warranty || "5 years",
+      imageType: selectedSystem.model?.includes("Ultrasun") ? "Ultrasun F2" : "Other",
+      specifications: {
+        collector_type: selectedSystem.collectorType || "Standard",
+        capacity: selectedSystem.tankSize || selectedSystem.capacity || "Standard",
+        suitable_for: selectedSystem.peopleCapacity || "Standard household"
+      },
+      components: [
+        { 
+          name: "Solar Collector", 
+          quantity: 1, 
+          unitPrice: collectorCost,
+          description: selectedSystem.collectorType || "High-performance collector"
+        },
+        { 
+          name: "Storage Tank", 
+          quantity: 1, 
+          unitPrice: tankCost,
+          description: `${selectedSystem.tankSize || selectedSystem.capacity || 'Standard'} capacity tank`
+        },
+        { 
+          name: "Installation Kit", 
+          quantity: 1, 
+          unitPrice: installationKit,
+          description: "Complete installation package"
+        }
+      ]
+    };
+  };
+
+  // Display loading state
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-lg text-gray-700">Generating your quotation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Display error state
+  if (error && !quotationData) {
     return (
       <div className="container mx-auto p-4">
         <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">No System Selected</h1>
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Error Generating Quotation</h1>
           <p className="text-gray-700 mb-6">
-            You haven't selected a solar heating system yet. Please go back and choose a system to generate your quotation.
+            {error}. Please try again or contact support.
           </p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/recommendations')}
             className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-lg"
           >
             Back to System Selection
@@ -30,47 +245,26 @@ const quote2 = () => {
     );
   }
 
-  // Safely generate quotation data with fallback values
-  const generateQuotationData = () => {
-    const baseCost = selectedSystem?.estimated_cost || 0;
-    
-    return {
-      id: `QUO-${Math.floor(Math.random() * 9000 + 1000)}`,
-      date: new Date().toLocaleDateString('en-GB'),
-      clientName: "Client Name",
-      clientEmail: "client.email@example.com",
-      clientPhone: "+254796871876",
-      solarSystem: selectedSystem?.name || "Solar Heating System",
-      systemDescription: selectedSystem?.description || "High-efficiency solar heating system",
-      technicianRequired: true,
-      warranty: "5 years",
-      imageType: selectedSystem?.name?.includes("Ultrasun") ? "Ultrasun F2" : "Other",
-      specifications: selectedSystem?.specifications || {},
-      components: [
-        { 
-          name: "Solar Collector", 
-          quantity: 1, 
-          unitPrice: Math.round(baseCost * 0.6),
-          description: selectedSystem?.specifications?.collector_type || "High-performance collector"
-        },
-        { 
-          name: "Storage Tank", 
-          quantity: 1, 
-          unitPrice: Math.round(baseCost * 0.3),
-          description: `${selectedSystem?.specifications?.capacity || 'Standard'} capacity tank`
-        },
-        { 
-          name: "Installation Kit", 
-          quantity: 1, 
-          unitPrice: Math.round(baseCost * 0.1),
-          description: "Complete installation package"
-        }
-      ],
-      clientLocation: "Your Location"
-    };
-  };
+  // Handle case where no system is selected
+  if (!quotationData) {
+    return (
+      <div className="container mx-auto p-4">
+        <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">No System Selected</h1>
+          <p className="text-gray-700 mb-6">
+            You haven't selected a solar heating system yet. Please go back and choose a system to generate your quotation.
+          </p>
+          <button
+            onClick={() => navigate('/recommendations')}
+            className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-lg"
+          >
+            Back to System Selection
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const quotationData = generateQuotationData();
   const totalAmount = quotationData.components.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
   return (
@@ -105,7 +299,7 @@ const quote2 = () => {
           </div>
         </div>
 
-        <div className="text-right w-fit  space-y-2 self-start">
+        <div className="text-right w-fit space-y-2 self-start">
           <div className="bg-blue-600 text-gray-200 px-4 top-0 flex flex-col justify-center items-center text-sm font-bold p-2 rounded-b">
             <p>WATER PUMPS</p>
             <p>BOREHOLE SERVICE</p>
@@ -140,15 +334,14 @@ const quote2 = () => {
 as detailed below: -</p>
             </div>
             <div>
-              <h2 className="text-primary_yellow italic font-semibold">Requirement: Solar WAter Heater</h2>
-              <p>Supply and Installation of... {quotationData.model}</p>
+              <h2 className="text-primary_yellow italic font-semibold">Requirement: Solar Water Heater</h2>
+              <p>Supply and Installation of {quotationData.model}</p>
             </div>
 
             <h3 className="italic font-semibold text-primary_yellow mt-2 mb-2">Equipment</h3>
             <div className="space-y-1 text-gray-700">
               <p><span className="font-medium">System:</span> {quotationData.solarSystem}</p>
               <p><span className="font-medium">System Model:</span> {quotationData.model}</p>
-
               <p><span className="font-medium">Description:</span> {quotationData.systemDescription}</p>
               <p>
                 <span className="font-medium">Technician Required:</span> 
@@ -163,13 +356,10 @@ as detailed below: -</p>
             {quotationData.imageType === "Ultrasun F2" ? (
               <img src={ultrasun} alt="Solar System" className="w-48 h-48 object-contain" />
             ) : (
-                <img src={ultrasun} alt="Solar System" className="w-48 h-48 object-contain" />
-
+              <img src={ultrasun} alt="Solar System" className="w-48 h-48 object-contain" />
             )}
           </div>
         </div>
-
-        
 
         {/* Components Table */}
         <div className="px-6 pb-6">
@@ -192,7 +382,7 @@ as detailed below: -</p>
                     <td className="p-3 text-gray-600">{item.description}</td>
                     <td className="p-3 text-center">{item.quantity}</td>
                     <td className="p-3 text-right">{item.unitPrice.toLocaleString()}</td>
-                    <td className="p-3 text-right  font-medium">
+                    <td className="p-3 text-right font-medium">
                       {(item.unitPrice * item.quantity).toLocaleString()}
                     </td>
                   </tr>
@@ -201,7 +391,7 @@ as detailed below: -</p>
               <tfoot>
                 <tr className="bg-blue-300 font-semibold text-gray-800">
                   <td colSpan="4" className="p-3 text-right">Total Amount:</td>
-                  <td className="p-3 text-right text-green-600 ">
+                  <td className="p-3 text-right text-green-600">
                     {totalAmount.toLocaleString()}
                   </td>
                 </tr>
@@ -212,63 +402,70 @@ as detailed below: -</p>
 
         <div className="px-6 pb-6">
         <div className="p-4 bg-white text-gray-800 text-sm space-y-6">
-      <h2 className="text-lg font-semibold underline text-primary_yellow">Terms of Trade</h2>
+          {/* If there's API-provided quotation text, render it */}
+          {quotationData.quotationText ? (
+            <div dangerouslySetInnerHTML={{ __html: quotationData.quotationText }} />
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold underline text-primary_yellow">Terms of Trade</h2>
 
-      <div>
-        <h3 className="font-medium text-primary_yellow italic">Delivery</h3>
-        <p>
-          Equipment available ex-stock subject to availability prior to order. Please allow for <strong>3No. weeks</strong> for
-          assembly from date of order.
-        </p>
-      </div>
+              <div>
+                <h3 className="font-medium text-primary_yellow italic">Delivery</h3>
+                <p>
+                  Equipment available ex-stock subject to availability prior to order. Please allow for <strong>3No. weeks</strong> for
+                  assembly from date of order.
+                </p>
+              </div>
 
-      <div>
-        <h3 className="font-medium text-primary_yellow italic">Payment</h3>
-        <p>Full on order.</p>
-      </div>
+              <div>
+                <h3 className="font-medium text-primary_yellow italic">Payment</h3>
+                <p>Full on order.</p>
+              </div>
 
-      <div>
-        <h3 className="font-medium text-primary_yellow italic">Warranty</h3>
-        <p>
-          The {quotationData.solarSystem} and accessories are warranted for <strong>24-months</strong>, from date of installation for
-          failures caused by faulty design, materials or workmanship.
-        </p>
-        <p className="mt-1">
-          Please see our attached standard <span className="text-blue-500 underline">Terms of Warranty</span> document for more details.
-        </p>
-      </div>
+              <div>
+                <h3 className="font-medium text-primary_yellow italic">Warranty</h3>
+                <p>
+                  The {quotationData.solarSystem} and accessories are warranted for <strong>{quotationData.warranty}</strong>, from date of installation for
+                  failures caused by faulty design, materials or workmanship.
+                </p>
+                <p className="mt-1">
+                  Please see our attached standard <span className="text-blue-500 underline">Terms of Warranty</span> document for more details.
+                </p>
+              </div>
 
-      <div>
-        <h3 className="font-medium text-primary_yellow italic">Validity</h3>
-        <p>
-          The prices indicated are subject to confirmation at the date of the order confirmation.
-        </p>
-        <p className="mt-1">
-          The prices given in <strong>KES</strong> have been arrived at based on the current Central Bank of Kenya exchange rates
-          as of <strong>{quotationData.date}</strong>. Should this rate vary by more than 3% at the time of order confirmation or
-          importation of goods, Davis & Shirtliff reserves the right to adjust the prices accordingly.
-        </p>
-        <p className="mt-1">
-          The above notwithstanding, please note that should the statutory tax policy (e.g., VAT/ Import duty) change
-          from the status at the time of order confirmation, receipt of goods, or invoicing, the prices will be adjusted
-          based on the new ruling rate at that time.
-        </p>
-      </div>
+              <div>
+                <h3 className="font-medium text-primary_yellow italic">Validity</h3>
+                <p>
+                  The prices indicated are subject to confirmation at the date of the order confirmation.
+                </p>
+                <p className="mt-1">
+                  The prices given in <strong>KES</strong> have been arrived at based on the current Central Bank of Kenya exchange rates
+                  as of <strong>{quotationData.date}</strong>. Should this rate vary by more than 3% at the time of order confirmation or
+                  importation of goods, Davis & Shirtliff reserves the right to adjust the prices accordingly.
+                </p>
+                <p className="mt-1">
+                  The above notwithstanding, please note that should the statutory tax policy (e.g., VAT/ Import duty) change
+                  from the status at the time of order confirmation, receipt of goods, or invoicing, the prices will be adjusted
+                  based on the new ruling rate at that time.
+                </p>
+              </div>
 
-      <p>
-        We enclose relevant manufacturers’ pamphlets detailing the equipment offered and look forward to your further
-        instructions in due course.
-      </p>
+              <p>
+                We enclose relevant manufacturers' pamphlets detailing the equipment offered and look forward to your further
+                instructions in due course.
+              </p>
 
-      <div className="mt-6">
-        <p>Yours faithfully,</p>
-        <p className="font-bold mt-1">For DAVIS & SHIRTLIFF LTD</p>
-        <p className="mt-1 italic">Sales Engineer Name</p>
-      </div>
-    </div>
-    <div className="flex py-2 justify-center items-center">
-      <img src={quoteback} alt="quote image"/>
-    </div>
+              <div className="mt-6">
+                <p>Yours faithfully,</p>
+                <p className="font-bold mt-1">For DAVIS & SHIRTLIFF LTD</p>
+                <p className="mt-1 italic">Sales Engineer Name</p>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex py-2 justify-center items-center">
+          <img src={quoteback} alt="quote image"/>
+        </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
             <button
@@ -278,13 +475,17 @@ as detailed below: -</p>
               Print Quotation
             </button>
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/recommendations')}
               className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg"
             >
               Back to Systems
             </button>
             <button
-              onClick={() => alert("Contact us to confirm this quotation")}
+              onClick={() => {
+                // Save quotation reference to localStorage
+                localStorage.setItem('quotationReference', quotationData.id);
+                alert("Your quotation has been saved. Reference: " + quotationData.id);
+              }}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg"
             >
               Confirm Order
@@ -296,4 +497,4 @@ as detailed below: -</p>
   );
 };
 
-export default quote2;
+export default Quote2;

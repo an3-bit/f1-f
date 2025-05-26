@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowRight, Info } from 'lucide-react';
+import { ArrowRight, Info, MapPin, Sun } from 'lucide-react';
+import Nav from '../../../components/navbar/nav';
 
 export default function WaterQualityAssessment() {
   const navigate = useNavigate();
   const location = useLocation();
   const [waterSource, setWaterSource] = useState('');
+  const [waterLocation, setWaterLocation] = useState('');
+  const [solarRadiation, setSolarRadiation] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [sections, setSections] = useState({
     client: false,
     occupancy: false,
@@ -15,13 +19,26 @@ export default function WaterQualityAssessment() {
   const returnTo = location.state?.returnTo || '/assessment-dashboard';
   const sectionKey = location.state?.sectionKey || 'waterQuality';
 
+  // Kenya counties list
+  const kenyaCounties = [
+    "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo-Marakwet", "Embu", "Garissa", 
+    "Homa Bay", "Isiolo", "Kajiado", "Kakamega", "Kericho", "Kiambu", "Kilifi", 
+    "Kirinyaga", "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia", "Lamu", "Machakos", 
+    "Makueni", "Mandera", "Marsabit", "Meru", "Migori", "Mombasa", "Murang'a", 
+    "Nairobi", "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua", "Nyeri", "Samburu", 
+    "Siaya", "Taita-Taveta", "Tana River", "Tharaka-Nithi", "Trans-Nzoia", "Turkana", 
+    "Uasin Gishu", "Vihiga", "Wajir", "West Pokot"
+  ];
+
   // Calculate completion percentage
-  const completion = (Object.values(sections).filter(Boolean).length / Object.values(sections).length) * 100;
+  const completion = Math.round((Object.values(sections).filter(Boolean).length / Object.values(sections).length) * 100);
 
   useEffect(() => {
     // Load saved sections and selected water source from localStorage
     const savedSections = localStorage.getItem('assessmentSections');
     const savedWaterSource = localStorage.getItem('selectedWaterSource');
+    const savedWaterLocation = localStorage.getItem('waterLocation');
+    const savedSolarRadiation = localStorage.getItem('solarRadiation');
     
     if (savedSections) {
       const parsed = JSON.parse(savedSections);
@@ -31,13 +48,64 @@ export default function WaterQualityAssessment() {
     if (savedWaterSource) {
       setWaterSource(savedWaterSource);
     }
+
+    if (savedWaterLocation) {
+      setWaterLocation(savedWaterLocation);
+    }
+
+    if (savedSolarRadiation) {
+      setSolarRadiation(JSON.parse(savedSolarRadiation));
+    }
   }, []);
+
+  const fetchSolarRadiation = async (county) => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`http://127.0.0.1:8000/solar/radiation?city=${county}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch solar radiation data');
+      }
+      const data = await response.json();
+      setSolarRadiation(data);
+      localStorage.setItem('solarRadiation', JSON.stringify(data));
+      setIsLoading(false);
+      return data;
+    } catch (error) {
+      console.error('Error fetching solar radiation:', error);
+      setIsLoading(false);
+      return null;
+    }
+  };
 
   const handleWaterSelection = (source) => {
     setWaterSource(source);
     
     // Save to localStorage
     localStorage.setItem('selectedWaterSource', source);
+  };
+
+  const handleLocationChange = async (e) => {
+    const selectedCounty = e.target.value;
+    setWaterLocation(selectedCounty);
+    localStorage.setItem('waterLocation', selectedCounty);
+    
+    if (selectedCounty) {
+      await fetchSolarRadiation(selectedCounty);
+    } else {
+      setSolarRadiation(null);
+      localStorage.removeItem('solarRadiation');
+    }
+  };
+
+  const saveWaterQualityData = () => {
+    // Create and save complete water quality data object
+    const waterQualityData = {
+      source: waterSource,
+      location: waterLocation,
+      solarRadiation: solarRadiation
+    };
+    
+    localStorage.setItem('waterQualityData', JSON.stringify(waterQualityData));
     
     // Update sections status
     const updatedSections = { ...sections, waterQuality: true };
@@ -47,28 +115,37 @@ export default function WaterQualityAssessment() {
 
   // Handler functions for navigation
   const handleNextStep = () => {
-    if (waterSource) {
+    if (waterSource && waterLocation && solarRadiation) {
+      saveWaterQualityData();
       navigate('/review-assessment', {
         state: {
           returnTo: returnTo
         }
       });
     } else {
-      alert('Please select a water source to continue');
+      alert('Please select a water source and county to continue');
     }
   };
 
   const handleBackToOccupancy = () => {
-    navigate('/occupancy', {
+    if (waterSource && waterLocation) {
+      saveWaterQualityData();
+    }
+    
+    navigate('/occupancy-details', {
       state: {
         returnTo: returnTo,
-        sectionKey: 'occupancy'
+        sectionKey: 'occupancy-details'
       }
     });
   };
 
   // Handler functions for sidebar navigation
   const handleClientSelect = () => {
+    if (waterSource && waterLocation) {
+      saveWaterQualityData();
+    }
+    
     navigate('/client-selection', {
       state: {
         returnTo: '/assessment-dashboard',
@@ -78,6 +155,10 @@ export default function WaterQualityAssessment() {
   };
 
   const handleOccupancyDetails = () => {
+    if (waterSource && waterLocation) {
+      saveWaterQualityData();
+    }
+    
     navigate('/occupancy', {
       state: {
         returnTo: '/assessment-dashboard',
@@ -100,59 +181,46 @@ export default function WaterQualityAssessment() {
     localStorage.removeItem('selectedClient');
     localStorage.removeItem('selectedOccupants');
     localStorage.removeItem('selectedWaterSource');
+    localStorage.removeItem('waterLocation');
+    localStorage.removeItem('waterQualityData');
+    localStorage.removeItem('solarRadiation');
+    
     setSections({
       client: false,
       occupancy: false,
       waterQuality: false
     });
     setWaterSource('');
+    setWaterLocation('');
+    setSolarRadiation(null);
   };
 
   const saveProgress = () => {
-    // Already saving to localStorage in other functions
-    alert('Progress saved successfully!');
+    if (waterSource && waterLocation) {
+      saveWaterQualityData();
+      alert('Progress saved successfully!');
+    } else {
+      alert('Please complete all required fields before saving');
+    }
   };
 
   const handleGenerateRecommendations = () => {
+    if (waterSource && waterLocation) {
+      saveWaterQualityData();
+    }
     navigate('/recommendations');
   };
 
   // Computed property for enabling/disabling the generate recommendations button
   const canGenerateRecommendations = completion >= 66; // At least 2 sections completed
 
+  const canProceed = waterSource && waterLocation && solarRadiation;
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="text-orange-500 mr-2">
-              <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center">
-                <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-              </div>
-            </div>
-            <span className="font-bold text-lg">AI Solar Water Assistant</span>
-          </div>
-          <nav className="flex items-center space-x-4">
-            {[
-              { label: 'Triage & Sizing', path: '/assessment-dashboard' },
-              { label: 'Future Expansion', path: '/assessment-dashboard' },
-              { label: 'Sales Quote', path: '/quote1' },
-              { label: 'Proposals', path: '/proposal-generation' },
-            ].map(({ label, path }) => (
-              <a
-                key={label}
-                href="#"
-                onClick={(e) => { e.preventDefault(); navigate(path); }}
-                className="px-3 py-2 text-gray-600 hover:text-gray-900"
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-          <div className="text-gray-700">John Doe (Local Mode)</div>
-        </div>
-      </header>
+      
+      <Nav />
 
       {/* Dashboard Header */}
       <div className="container mx-auto px-4 py-4">
@@ -311,7 +379,7 @@ export default function WaterQualityAssessment() {
           <div className="max-w-3xl mx-auto">
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <h2 className="text-2xl font-bold mb-1">Water Quality Information</h2>
-              <p className="text-gray-600 mb-6">Details about water quality and source</p>
+              <p className="text-gray-600 mb-6">Details about water quality, source, and location</p>
 
               <div className="mb-6">
                 <h3 className="font-medium text-gray-800 mb-4">Water Hardness / Quality</h3>
@@ -337,6 +405,69 @@ export default function WaterQualityAssessment() {
                   ))}
                 </div>
               </div>
+
+              {/* Location Dropdown */}
+              <div className="mb-6">
+                <h3 className="font-medium text-gray-800 mb-4">
+                  <div className="flex items-center">
+                    <MapPin className="mr-1 h-5 w-5 text-gray-500" />
+                    County Location
+                  </div>
+                </h3>
+                <div className="relative rounded-md shadow-sm">
+                  <select
+                    name="location"
+                    id="location"
+                    value={waterLocation}
+                    onChange={handleLocationChange}
+                    className="block w-full rounded-md border-gray-300 border p-3 focus:border-blue-500 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select a county</option>
+                    {kenyaCounties.map((county) => (
+                      <option key={county} value={county}>
+                        {county}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="mt-2 text-sm text-gray-500">
+                  This helps us recommend systems suitable for your location's climate and conditions.
+                </p>
+              </div>
+
+              {/* Solar Radiation Information */}
+              {isLoading ? (
+                <div className="bg-blue-50 border border-blue-100 rounded-md p-4 mb-6">
+                  <div className="flex items-center justify-center">
+                    <svg className="animate-spin h-5 w-5 text-blue-600 mr-2" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Loading solar radiation data...</span>
+                  </div>
+                </div>
+              ) : solarRadiation ? (
+                <div className="bg-blue-50 border border-blue-100 rounded-md p-4 mb-6">
+                  <div className="flex space-x-3">
+                    <div className="mt-0.5">
+                      <Sun className="text-yellow-500" size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-blue-800 mb-2">Solar Radiation Data for {solarRadiation.city}</h4>
+                      <div className="flex items-center">
+                        <div className="bg-yellow-100 px-3 py-2 rounded-lg border border-yellow-200">
+                          <span className="text-yellow-800 font-medium">Annual Average: </span>
+                          <span className="text-yellow-900 font-bold text-lg">{solarRadiation.annual_average} kWh/m²/day</span>
+                        </div>
+                      </div>
+                      <p className="text-blue-700 text-sm mt-2">
+                        This solar radiation value will be used to calculate the optimal solar hot water system for your location.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="bg-amber-50 border border-amber-100 rounded-md p-4 mb-6">
                 <div className="flex space-x-3">
@@ -364,9 +495,9 @@ export default function WaterQualityAssessment() {
                 </button>
                 <button
                   className={`flex items-center px-5 py-2 ${
-                    waterSource ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-400 cursor-not-allowed'
+                    canProceed ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-400 cursor-not-allowed'
                   } text-white rounded`}
-                  disabled={!waterSource}
+                  disabled={!canProceed}
                   onClick={handleNextStep}
                 >
                   Next: Review Assessment

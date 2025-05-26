@@ -6,6 +6,7 @@ const ClientSelection = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchField, setSearchField] = useState('Name'); // Default search field
   const [selectedClient, setSelectedClient] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -15,12 +16,13 @@ const ClientSelection = () => {
     occupancy: false,
     waterQuality: false
   });
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
-  const completion =
+  const completion = Math.round(
     (Object.values(sections).filter(Boolean).length /
       Object.values(sections).length) *
-    100;
-
+    100
+  );
   const returnTo = location.state?.returnTo || '/assessment-dashboard';
   const sectionKey = location.state?.sectionKey || 'client';
 
@@ -37,66 +39,80 @@ const ClientSelection = () => {
 
   // Handle search input changes
   const handleSearchInput = (e) => {
-    setSearchTerm(e.target.value);
-    
+    const value = e.target.value;
+    setSearchTerm(value);
+
     // Reset error when user types
     if (error) setError('');
-    
-    // Only search if the user has entered at least 3 characters
-    if (e.target.value.length >= 3) {
-      searchClients(e.target.value);
-    } else {
-      setFilteredClients([]);
+
+    // Clear any existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
     }
+
+    // Set a new timeout to search after 300ms of no typing
+    const timeout = setTimeout(() => {
+      searchClients(value);
+    }, 300);
+
+    setSearchTimeout(timeout);
   };
 
   // Function to search clients
   const searchClients = async (term) => {
+    if (!term.trim()) {
+      setFilteredClients([]);
+      return;
+    }
+
     setIsLoading(true);
     setError('');
-    
+
     try {
-      // API call to fetch clients by phone number
+      // API call to fetch clients by selected field
       const response = await axios.get(
-        `https://f1-backend-qhf8.onrender.com/erp/Customer_Card/Phone_No/${term}`
+        `http://127.0.0.1:8000/erp/Customer_Card/${searchField}/${term}`
       );
-      
+
       const data = response.data?.value;
-      
+
       if (Array.isArray(data) && data.length > 0) {
-        // Transform API data into the format our component expects
-        const formattedClients = data.map(client => ({
-          id: client.No || client.SystemId || Math.random().toString(),
-          name: client.Name || 'Unknown Client',
-          details: client.Phone_No || term,
-          email: client.E_Mail || ''
-        }));
-        
+        // Transform API data into the format our component expects and filter for "starts with" matches
+        const formattedClients = data
+          .filter(client => {
+            const searchValue = term.toLowerCase();
+            const clientValue = String(client[searchField]).toLowerCase();
+            return clientValue.startsWith(searchValue);
+          })
+          .map(client => ({
+            id: client.No || client.SystemId || Math.random().toString(),
+            name: client.Name || 'Unknown Client',
+            details: client.Phone_No || term,
+            email: client.E_Mail || ''
+          }));
+
         setFilteredClients(formattedClients);
       } else {
         setFilteredClients([]);
-        // Only set error if the user isn't still typing
-        if (term.length > 5) {
-          setError('No clients found with this phone number.');
-        }
+        setError(`No clients found with this ${searchField.toLowerCase()}.`);
       }
     } catch (err) {
       console.error('Error fetching clients:', err);
       setError('Failed to fetch clients. Please check your connection and try again.');
-      
+
       // For development - fallback to mock data if the API is unavailable
       if (process.env.NODE_ENV === 'development') {
         console.log('Using mock data for development');
         setFilteredClients([
-          { 
-            id: 'mock1', 
-            name: 'John Smith (MOCK)', 
+          {
+            id: 'mock1',
+            name: 'John Smith (MOCK)',
             details: '+254768372439',
             email: 'john@example.com'
           },
-          { 
-            id: 'mock2', 
-            name: 'Jane Doe (MOCK)', 
+          {
+            id: 'mock2',
+            name: 'Jane Doe (MOCK)',
             details: '+254768372440',
             email: 'jane@example.com'
           }
@@ -107,11 +123,25 @@ const ClientSelection = () => {
     }
   };
 
+  // Get placeholder text based on selected search field
+  const getSearchPlaceholder = () => {
+    switch (searchField) {
+      case 'Name':
+        return 'Enter client name (e.g., Anastacia)';
+      case 'Phone_No':
+        return 'Enter phone number (e.g., 254768372439)';
+      case 'No':
+        return 'Enter customer number (e.g., 132841)';
+      default:
+        return 'Search...';
+    }
+  };
+
   const handleSelectClient = (client) => {
     setSelectedClient(client);
     // Save selection to localStorage
     localStorage.setItem('selectedClient', JSON.stringify(client));
-    
+
     // Update the sections in localStorage
     const updatedSections = { ...sections, client: true };
     localStorage.setItem('assessmentSections', JSON.stringify(updatedSections));
@@ -128,14 +158,14 @@ const ClientSelection = () => {
       const updatedSections = { ...sections, client: true };
       localStorage.setItem('assessmentSections', JSON.stringify(updatedSections));
       setSections(updatedSections);
-      
+
       // Navigate based on where we want to go next
       if (returnTo === '/assessment-dashboard') {
         // Return to dashboard with updated section status
-        navigate(returnTo, { 
-          state: { 
-            updatedSections: { [sectionKey]: true } 
-          } 
+        navigate(returnTo, {
+          state: {
+            updatedSections: { [sectionKey]: true }
+          }
         });
       } else {
         // Continue to next step in the assessment flow
@@ -153,29 +183,29 @@ const ClientSelection = () => {
 
   // Handler functions for sidebar navigation
   const handleClientSelect = () => {
-    navigate('/client-selection', { 
-      state: { 
+    navigate('/client-selection', {
+      state: {
         returnTo: '/assessment-dashboard',
         sectionKey: 'client'
-      } 
+      }
     });
   };
 
   const handleOccupancyDetails = () => {
-    navigate('/occupancy-details', { 
-      state: { 
+    navigate('/occupancy-details', {
+      state: {
         returnTo: '/assessment-dashboard',
         sectionKey: 'occupancy'
-      } 
+      }
     });
   };
 
   const handleWaterQuality = () => {
-    navigate('/water-quality', { 
-      state: { 
+    navigate('/water-quality', {
+      state: {
         returnTo: '/assessment-dashboard',
         sectionKey: 'waterQuality'
-      } 
+      }
     });
   };
 
@@ -218,46 +248,46 @@ const ClientSelection = () => {
   // Computed property for enabling/disabling the generate recommendations button
   const canGenerateRecommendations = completion >= 66; // At least 2 sections completed
 
-   const [userName, setUserName] = useState('');
-    const [userInitials, setUserInitials] = useState('');
-    const [showUserMenu, setShowUserMenu] = useState(false);
-    
-    useEffect(() => {
-      // Check if user is logged in and get user data from localStorage
-      const name = localStorage.getItem('userName');
-      if (name) {
-        setUserName(name);
-        // Create initials from name (e.g. John Doe -> JD)
-        const initials = name
-          .split(' ')
-          .map(part => part[0])
-          .join('')
-          .toUpperCase();
-        setUserInitials(initials);
-      } else {
-        // Redirect to login if not logged in
-        navigate('/login', { replace: true });
-      }
-    }, [navigate]);
-    
-    const handleSignOut = () => {
-      // Clear authentication data
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('userEmail');
-      localStorage.removeItem('userType');
-      
-      // Redirect to login page
-      navigate('/', { replace: true });
-    };
-  
-    const toggleUserMenu = () => {
-      setShowUserMenu(!showUserMenu);
-    };
-    
-   
-    const goToProfile = () => navigate('/profile');
-    const goToSettings = () => navigate('/settings');
+  const [userName, setUserName] = useState('');
+  const [userInitials, setUserInitials] = useState('');
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  useEffect(() => {
+    // Check if user is logged in and get user data from localStorage
+    const name = localStorage.getItem('userName');
+    if (name) {
+      setUserName(name);
+      // Create initials from name (e.g. John Doe -> JD)
+      const initials = name
+        .split(' ')
+        .map(part => part[0])
+        .join('')
+        .toUpperCase();
+      setUserInitials(initials);
+    } else {
+      // Redirect to login if not logged in
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
+
+  const handleSignOut = () => {
+    // Clear authentication data
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('userType');
+
+    // Redirect to login page
+    navigate('/', { replace: true });
+  };
+
+  const toggleUserMenu = () => {
+    setShowUserMenu(!showUserMenu);
+  };
+
+
+  const goToProfile = () => navigate('/profile');
+  const goToSettings = () => navigate('/settings');
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -287,11 +317,11 @@ const ClientSelection = () => {
                 <span className="font-medium text-lg text-white">AI Solar Water Dashboard</span>
               </div>
             </div>
-            
+
             {/* Middle - Navigation */}
             <nav className="hidden md:flex items-center space-x-4">
-              <a 
-                href="/home1" 
+              <a
+                href="/home1"
                 className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
@@ -300,8 +330,8 @@ const ClientSelection = () => {
               >
                 <span>Dashboard</span>
               </a>
-              <a 
-                href="/assessment-dashboard" 
+              <a
+                href="/assessment-dashboard"
                 className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
@@ -310,8 +340,8 @@ const ClientSelection = () => {
               >
                 <span>Triage & Sizing</span>
               </a>
-              <a 
-                href="/solar-system-expansion-planner" 
+              <a
+                href="/solar-system-expansion-planner"
                 className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
@@ -320,8 +350,8 @@ const ClientSelection = () => {
               >
                 <span>Future Expansion</span>
               </a>
-              <a 
-                href="/quote1" 
+              <a
+                href="/quote1"
                 className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
@@ -330,8 +360,8 @@ const ClientSelection = () => {
               >
                 <span>Sales Quote</span>
               </a>
-              <a 
-                href="/proposal-generation" 
+              <a
+                href="/proposal-generation"
                 className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
@@ -341,7 +371,7 @@ const ClientSelection = () => {
                 <span>Proposals</span>
               </a>
             </nav>
-            
+
             {/* Right side - User profile */}
             <div className="relative">
               <button
@@ -353,7 +383,7 @@ const ClientSelection = () => {
                   <span className="text-white font-medium">{userInitials}</span>
                 </div>
               </button>
-              
+
               {/* Dropdown menu */}
               {showUserMenu && (
                 <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-10">
@@ -394,27 +424,27 @@ const ClientSelection = () => {
             <p className="text-gray-600">Configure solar hot water system requirements</p>
           </div>
           <div className="flex gap-2">
-            <button 
+            <button
               onClick={resetProgress}
               className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md flex items-center"
             >
               Reset Progress
             </button>
-            <button 
+            <button
               onClick={saveProgress}
               className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center"
             >
               Save Progress
               <svg className="ml-1 w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round"/>
-                <polyline points="17 21 17 13 7 13 7 21" strokeLinecap="round" strokeLinejoin="round"/>
-                <polyline points="7 3 7 8 15 8" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points="17 21 17 13 7 13 7 21" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points="7 3 7 8 15 8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            <button 
+            <button
               onClick={handleGenerateRecommendations}
-              className={`${canGenerateRecommendations 
-                ? 'bg-blue-500 hover:bg-blue-600' 
+              className={`${canGenerateRecommendations
+                ? 'bg-blue-500 hover:bg-blue-600'
                 : 'bg-gray-400 cursor-not-allowed'} text-white px-4 py-2 rounded-md flex items-center`}
               disabled={!canGenerateRecommendations}
             >
@@ -546,26 +576,35 @@ const ClientSelection = () => {
 
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <h2 className="text-lg font-medium mb-4">Client Search</h2>
-              
-              <div className="mb-4">
+
+              <div className="mb-4 flex gap-2">
+                <select
+                  value={searchField}
+                  onChange={(e) => setSearchField(e.target.value)}
+                  className="p-2 border border-gray-300 rounded-md bg-white"
+                >
+                  <option value="Name">Search by Name</option>
+                  <option value="Phone_No">Search by Phone Number</option>
+                  <option value="No">Search by Customer Number</option>
+                </select>
                 <input
                   type="text"
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  placeholder="Search by phone number..."
+                  className="flex-1 p-2 border border-gray-300 rounded-md"
+                  placeholder={getSearchPlaceholder()}
                   value={searchTerm}
                   onChange={handleSearchInput}
                 />
               </div>
-              
+
               <p className="text-sm text-gray-600 mb-6">
-                Enter at least 3 digits of a phone number to search for clients. For example, try "254768372439".
+                Start typing to search for clients. The search will look for matches in the selected field.
               </p>
-              
+
               {/* Search Results */}
               {searchTerm.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-md font-medium mb-2">Search Results</h3>
-                  
+
                   {isLoading ? (
                     <div className="text-center p-4 border border-gray-200 rounded-md bg-gray-50">
                       <p className="text-gray-500">Loading clients...</p>
@@ -577,11 +616,10 @@ const ClientSelection = () => {
                   ) : filteredClients.length > 0 ? (
                     <div className="border border-gray-200 rounded-md divide-y divide-gray-200">
                       {filteredClients.map(client => (
-                        <div 
-                          key={client.id} 
-                          className={`p-4 cursor-pointer hover:bg-gray-50 ${
-                            selectedClient?.id === client.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                          }`}
+                        <div
+                          key={client.id}
+                          className={`p-4 cursor-pointer hover:bg-gray-50 ${selectedClient?.id === client.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                            }`}
                           onClick={() => handleSelectClient(client)}
                         >
                           <div className="flex justify-between items-center">
@@ -599,18 +637,14 @@ const ClientSelection = () => {
                         </div>
                       ))}
                     </div>
-                  ) : searchTerm.length >= 3 ? (
-                    <div className="text-center p-4 border border-gray-200 rounded-md bg-gray-50">
-                      <p className="text-gray-500">No clients found with phone number containing "{searchTerm}"</p>
-                    </div>
                   ) : (
                     <div className="text-center p-4 border border-gray-200 rounded-md bg-gray-50">
-                      <p className="text-gray-500">Enter at least 3 digits to search</p>
+                      <p className="text-gray-500">No clients found with {searchField.toLowerCase()} containing "{searchTerm}"</p>
                     </div>
                   )}
                 </div>
               )}
-              
+
               {searchTerm.length === 0 && !selectedClient && (
                 <div className="border border-gray-200 rounded-md p-8 mb-6 flex flex-col items-center justify-center">
                   <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
@@ -636,7 +670,7 @@ const ClientSelection = () => {
                         <p className="text-gray-600">{selectedClient.details}</p>
                         {selectedClient.email && <p className="text-gray-500 text-sm">Email: {selectedClient.email}</p>}
                       </div>
-                      <button 
+                      <button
                         onClick={() => setSelectedClient(null)}
                         className="text-red-500 hover:text-red-700 text-sm"
                       >
@@ -661,11 +695,11 @@ const ClientSelection = () => {
                   </svg>
                   Back to Dashboard
                 </button>
-                
-                
+
+
                 {selectedClient && (
                   <button
-                  onClick={() => navigate('/occupancy-details')}
+                    onClick={() => navigate('/occupancy-details')}
                     className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-md flex items-center"
                   >
                     Proceed to Occupancy Details

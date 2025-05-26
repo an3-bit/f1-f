@@ -25,7 +25,7 @@ const System_Advisor = () => {
     resetTranscript();
 
     try {
-      const response = await axios.post("https://f1-backend-qhf8.onrender.com/api/triage", {
+      const response = await axios.post("http://127.0.0.1:8000/api/triage", {
         user_query: query,
       });
 
@@ -69,13 +69,24 @@ const System_Advisor = () => {
           Tell us about your hot water needs, and we'll help you find the perfect solar solution.
         </p>
 
+        <div className="mt-6">
+          
+          <button
+            onClick={() => navigate('/questionnaire')}
+            className="mt-2 px-4 py-2 border border-gray-500 text-gray-700 rounded-md hover:bg-gray-200 transition"
+          >
+            Start from the Questionnaire
+          </button>
+        </div>
+        <p className="text-gray-600 mt-6">OR</p>
+      
         <form
           onSubmit={handleSubmit}
           className="bg-gradient-to-r from-blue-50 to-orange-50 p-6 mt-6 rounded-lg shadow-md"
         >
           <h2 className="font-semibold text-gray-800 text-xl md:text-2xl flex items-center justify-center gap-2">
-            <BiSun size={24} className="text-primary_yellow" />
-            How can we help with your solar water heating needs?
+            
+            Get Personalized Recommendations by Asking a Question on this chat box below.
           </h2>
 
           <div className="text-sm text-gray-600 mt-2 text-left max-w-md mx-auto">
@@ -131,15 +142,7 @@ const System_Advisor = () => {
           </div>
         </form>
 
-        <div className="mt-6">
-          <p className="text-gray-600">Already know what you need?</p>
-          <button
-            onClick={() => navigate('/questionnaire')}
-            className="mt-2 px-4 py-2 border border-gray-500 text-gray-700 rounded-md hover:bg-gray-200 transition"
-          >
-            Skip to Questionnaire
-          </button>
-        </div>
+       
       </div>
     </div>
   );

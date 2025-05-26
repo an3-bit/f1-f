@@ -48,6 +48,7 @@ const Navbar = () => {
               <li><Link to="/" onClick={() => setSideMenu(false)}>Home</Link></li>
               <li><Link to="/client-details" onClick={() => setSideMenu(false)}>System Advisor</Link></li>
               <li><Link to="/system-sizing" onClick={() => setSideMenu(false)}>System Sizing</Link></li>
+              {/* <li><Link to="/get-a-quote" onClick={() => setSideMenu(false)}>Get a Quote</Link></li> */}
             </ul>
 
             {/* Mobile Sign In Button */}
@@ -60,6 +61,7 @@ const Navbar = () => {
             >
               <BiUser /> Sign In
             </button>
+
 
             <div className="flex gap-4 mt-6 text-sm">
               <a href="tel:+254797871876"><FaPhone size={20} className="rotate-90" /></a>
@@ -78,6 +80,8 @@ const Navbar = () => {
           <li><Link to="/">Home</Link></li>
           <li><Link to="/system-advisor">System Advisor</Link></li>
           <li><Link to="/system-sizing">System Sizing</Link></li>
+          {/* <li><Link to="/get-a-quote">Get a Quote</Link></li> */}
+          {/* <li><Link to="/test">Solar Intensity</Link></li> */}
         </ul>
         <div>
           <button

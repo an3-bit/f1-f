@@ -105,7 +105,7 @@ const AssessmentDashboard = () => {
 
   const handleGenerateRecommendations = () => {
     if (canGenerateRecommendations) {
-      navigate('/assessment/recommendations');
+      navigate('/recommendations');
     } else {
       alert('Please complete all required sections first');
     }

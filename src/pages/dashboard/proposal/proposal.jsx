@@ -1,38 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Eye, Download, FileText, X } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Search, Eye, Download, FileText, X, User, Settings, LogOut } from 'lucide-react';
+
 
 export default function ProposalGenerationPage() {
   const navigate = useNavigate();
-  const [proposals, setProposals] = useState([
-    {
-      id: 1,
-      title: 'Oceanside Resort Solar Hot Water Proposal',
-      client: 'Oceanside Resort',
-      quoteRef: 'SQ-2024-001',
-      date: 'Aug 19, 2024',
-      status: 'Completed',
-      total: 'Ksh 1,376,427'
-    },
-    {
-      id: 2,
-      title: 'Mountain View Apartments Solar Installation',
-      client: 'Mountain View Apartments',
-      quoteRef: 'SQ-2024-002',
-      date: 'Aug 20, 2024',
-      status: 'Draft',
-      total: 'Ksh 950,000'
-    },
-    {
-      id: 3,
-      title: 'Annastacia Mumbua Solar Hot Water Proposal',
-      client: 'Annastacia Mumbua',
-      quoteRef: 'WE/Q/DND/SDR/1007497',
-      date: 'May 10, 2025',
-      status: 'Draft',
-      total: 'Ksh 1,120,000'
-    }
-  ]);
+  const location = useLocation();
+  const [proposals, setProposals] = useState([]);
   
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,6 +17,34 @@ export default function ProposalGenerationPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [proposalSearchQuery, setProposalSearchQuery] = useState('');
   const [filteredProposals, setFilteredProposals] = useState(proposals);
+  const [userName, setUserName] = useState('');
+  const [userInitials, setUserInitials] = useState('');
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  // Check for quote data passed from the sales quote page
+  useEffect(() => {
+    if (location.state && location.state.quoteData) {
+      const quoteData = location.state.quoteData;
+      
+      // Create a quote object from the passed data
+      const newQuote = {
+        reference: quoteData.Reference || quoteData.No,
+        client: quoteData.Sell_to_Customer_Name,
+        date: formatDate(new Date().toISOString()),
+        status: 'Open',
+        total: quoteData.Amount_Expected ? `Ksh ${quoteData.Amount_Expected.toLocaleString()}` : 'Price not available',
+        validUntil: formatDate(quoteData.Quote_Valid_Until_Date)
+      };
+      
+      // Set as selected quote and open the generation form
+      setSelectedQuote(newQuote);
+      setIsGeneratingForm(true);
+      setProposalTitle(`${newQuote.client} Solar Hot Water Proposal`);
+      
+      // Clear the state to prevent re-processing
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
   
   // Filter proposals based on search query
   useEffect(() => {
@@ -73,43 +75,36 @@ export default function ProposalGenerationPage() {
       if (searchQuery.includes('SQ') || searchQuery.includes('WE/Q') || searchQuery.includes('/')) {
         // Call the API endpoint to get quote details
         try {
-          // Replace with actual API call
-          // const response = await fetch(`/erp/get/sales-quote/${encodeURIComponent(searchQuery)}`);
-          // const data = await response.json();
+          // Make the actual API call
+          const response = await fetch(`http://127.0.0.1:8000/erp/get/sales-quote/${encodeURIComponent(searchQuery)}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
           
-          // For demonstration, we'll simulate the API response
-          let mockData;
-          
-          if (searchQuery.includes('SQ-2024-001')) {
-            mockData = {
-              reference: 'SQ-2024-001',
-              client: 'Oceanside Resort',
-              date: 'Aug 19, 2024',
-              status: 'Accepted',
-              total: 'Ksh 1,376,427'
-            };
-          } else if (searchQuery.includes('SQ-2024-002')) {
-            mockData = {
-              reference: 'SQ-2024-002',
-              client: 'Mountain View Apartments',
-              date: 'Aug 20, 2024',
-              status: 'Draft',
-              total: 'Ksh 950,000'
-            };
-          } else if (searchQuery.includes('1007497') || searchQuery.includes('WE/Q/DND/SDR')) {
-            mockData = {
-              reference: 'WE/Q/DND/SDR/1007497',
-              client: 'Annastacia Mumbua',
-              date: 'May 10, 2025',
-              status: 'Accepted',
-              total: 'Ksh 1,120,000',
-              validUntil: '6/10/2025',
-              quoteNumber: 'SQ1007497'
-            };
+          if (!response.ok) {
+            throw new Error(`Error: ${response.status} ${response.statusText}`);
           }
           
-          if (mockData) {
-            setSearchResults([mockData]);
+          // Use the actual API response data
+          const data = await response.json();
+          
+          // Process the quote data to extract only what we need
+          if (data && data['@odata.context'] && data.value && data.value.length > 0) {
+            const quoteData = data.value[0];
+            
+            // Extract the necessary fields
+            const processedQuote = {
+              reference: quoteData.Reference || quoteData.No,
+              client: quoteData.Sell_to_Customer_Name,
+              date: formatDate(quoteData.Document_Date),
+              status: quoteData.Status,
+              total: calculateTotal(quoteData) || 'Price not available',
+              validUntil: formatDate(quoteData.Quote_Valid_Until_Date)
+            };
+            
+            setSearchResults([processedQuote]);
           } else {
             setSearchResults([]);
           }
@@ -119,24 +114,55 @@ export default function ProposalGenerationPage() {
           setSearchResults([]);
         }
       } else {
-        // Simulate search by client name
-        const results = proposals
-          .filter(p => p.client.toLowerCase().includes(searchQuery.toLowerCase()))
-          .map(p => ({
-            reference: p.quoteRef,
-            client: p.client,
-            date: p.date,
-            status: p.status === 'Completed' ? 'Accepted' : p.status,
-            total: p.total
-          }));
+        // Search by client name
+        try {
+          // Replace with actual API call for client search
+          const response = await fetch(`http://127.0.0.1:8000/erp/search/clients/${encodeURIComponent(searchQuery)}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
           
-        setSearchResults(results);
+          if (!response.ok) {
+            throw new Error(`Error: ${response.status} ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          setSearchResults(data);
+        } catch (error) {
+          console.error('Error searching clients:', error);
+          setSearchResults([]);
+        }
       }
     } catch (error) {
       console.error('Error searching quotes:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  // Format date to a readable format
+  const formatDate = (dateString) => {
+    if (!dateString || dateString === '0001-01-01') return 'N/A';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+    } catch {
+      return dateString;
+    }
+  };
+  
+  // Calculate total from quote data (placeholder - adjust based on your API response structure)
+  const calculateTotal = (quoteData) => {
+    // This is a placeholder. In a real implementation, you would extract and sum 
+    // the line items from the quote or use a total field if available
+    return quoteData.Amount_Expected ? `Ksh ${quoteData.Amount_Expected.toLocaleString()}` : 'Price not available';
   };
   
   // Handle search input changes
@@ -171,7 +197,7 @@ export default function ProposalGenerationPage() {
   
     setTimeout(() => {
       const newProposal = {
-        id: proposals.length + 1,
+        id: Date.now(), // Use timestamp as a unique ID
         title: proposalTitle,
         client: selectedQuote.client,
         quoteRef: selectedQuote.reference,
@@ -180,17 +206,21 @@ export default function ProposalGenerationPage() {
         total: selectedQuote.total
       };
   
-      setProposals([...proposals, newProposal]);
-      setFilteredProposals([...proposals, newProposal]);
+      const updatedProposals = [...proposals, newProposal];
+      setProposals(updatedProposals);
+      setFilteredProposals(updatedProposals);
+      
+      // Save to localStorage for persistence
+      localStorage.setItem('proposals', JSON.stringify(updatedProposals));
+      
       setIsGeneratingForm(false);
       setSelectedQuote(null);
       setIsLoading(false);
   
-      // ✅ Navigate to proposal-template page with state
+      // Navigate to proposal-template page with state
       navigate('/proposal-template', { state: { proposal: newProposal } });
     }, 1000);
   };
-  
   
   // Cancel actions
   const handleCancel = () => {
@@ -210,8 +240,12 @@ export default function ProposalGenerationPage() {
   };
   
   const handleDownloadProposal = (proposal) => {
-    // You can navigate to the template page if download is handled there
     navigate('/proposal-template', { state: { proposal, mode: 'download' } });
+  };
+  
+  const handleEditProposal = (proposal) => {
+    // Implement edit functionality
+    console.log('Editing proposal:', proposal);
   };
   
   const handleSignOut = () => {
@@ -228,45 +262,43 @@ export default function ProposalGenerationPage() {
   const toggleUserMenu = () => {
     setShowUserMenu(!showUserMenu);
   };
-  
-  const [userName, setUserName] = useState('');
-  const [userInitials, setUserInitials] = useState('');
-  const [showUserMenu, setShowUserMenu] = useState(false);
     
-    useEffect(() => {
-      // Check if user is logged in and get user data from localStorage
-      const name = localStorage.getItem('userName');
-      if (name) {
-        setUserName(name);
-        // Create initials from name (e.g. John Doe -> JD)
-        const initials = name
-          .split(' ')
-          .map(part => part[0])
-          .join('')
-          .toUpperCase();
-        setUserInitials(initials);
-      } else {
-        // Redirect to login if not logged in
-        navigate('/login', { replace: true });
+  useEffect(() => {
+    // Check if user is logged in and get user data from localStorage
+    const name = localStorage.getItem('userName');
+    if (name) {
+      setUserName(name);
+      // Create initials from name (e.g. John Doe -> JD)
+      const initials = name
+        .split(' ')
+        .map(part => part[0])
+        .join('')
+        .toUpperCase();
+      setUserInitials(initials);
+    } else {
+      // Redirect to login if not logged in
+      navigate('/login', { replace: true });
+    }
+    
+    // Load existing proposals from localStorage or API
+    const fetchProposals = async () => {
+      try {
+        // You can replace this with an actual API call
+        const savedProposals = localStorage.getItem('proposals');
+        if (savedProposals) {
+          setProposals(JSON.parse(savedProposals));
+          setFilteredProposals(JSON.parse(savedProposals));
+        }
+      } catch (error) {
+        console.error('Error loading proposals:', error);
       }
-    }, [navigate]);
+    };
     
-
-  const startAssessment = () => navigate('/assessment-dashboard');
-  const createQuote = () => navigate('/quote1');
-  const manageProposals = () => navigate('/proposal-generation');
-  const planExpansion = () => navigate('/solar-system-expansion-planner');
-  const viewProposal = (id) => navigate(`/proposals/${id}`);
-  const openProductAssistant = () => navigate('/product-assistant');
+    fetchProposals();
+  }, [navigate]);
+  
   const goToProfile = () => navigate('/profile');
   const goToSettings = () => navigate('/settings');
- 
-  
-  // Edit proposal
-  const handleEditProposal = (proposal) => {
-    // Implement edit functionality
-    console.log('Editing proposal:', proposal);
-  };
   
   // Search Modal Component
   const SearchModal = () => {
@@ -295,7 +327,7 @@ export default function ProposalGenerationPage() {
               <input
                 type="text"
                 className="block w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter quote reference (e.g., WE/Q/DND/SDR/1007497)"
+                placeholder="Enter quote reference (e.g., WE/Q/DND/SDR/1007504)"
                 value={searchQuery}
                 onChange={handleSearchChange}
               />
@@ -334,7 +366,7 @@ export default function ProposalGenerationPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{quote.date}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          quote.status === 'Accepted' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          quote.status === 'Accepted' || quote.status === 'Open' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                         }`}>
                           {quote.status}
                         </span>
@@ -426,16 +458,6 @@ export default function ProposalGenerationPage() {
                 <span>Triage & Sizing</span>
               </a>
               <a 
-                href="/solar-system-expansion-planner" 
-                className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate('/solar-system-expansion-planner');
-                }}
-              >
-                <span>Future Expansion</span>
-              </a>
-              <a 
                 href="/quote1" 
                 className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
                 onClick={(e) => {
@@ -446,11 +468,11 @@ export default function ProposalGenerationPage() {
                 <span>Sales Quote</span>
               </a>
               <a 
-                href="/proposal-generation" 
-                className="px-3 py-2 text-white hover:bg-blue-700 rounded-md transition-colors"
+                href="/proposal-template" 
+                className="px-3 py-2 bg-blue-700 text-white rounded-md transition-colors"
                 onClick={(e) => {
                   e.preventDefault();
-                  navigate('/proposal-generation');
+                  navigate('/proposal-template');
                 }}
               >
                 <span>Proposals</span>
@@ -483,7 +505,7 @@ export default function ProposalGenerationPage() {
                     onClick={goToSettings}
                     className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                   >
-                    <SettingsIcon className="mr-2 h-4 w-4" />
+                    <Settings className="mr-2 h-4 w-4" />
                     Settings
                   </button>
                   <div className="border-t border-gray-100"></div>
@@ -538,12 +560,6 @@ export default function ProposalGenerationPage() {
                     <p className="font-medium">{selectedQuote.validUntil}</p>
                   </div>
                 )}
-                {selectedQuote.quoteNumber && (
-                  <div>
-                    <p className="text-sm text-gray-500">Quote Number:</p>
-                    <p className="font-medium">{selectedQuote.quoteNumber}</p>
-                  </div>
-                )}
               </div>
             </div>
             
@@ -584,48 +600,26 @@ export default function ProposalGenerationPage() {
               </div>
             </div>
             
-            {selectedQuote ? (
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Reference:</p>
-                    <p className="font-medium">{selectedQuote.reference}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Client:</p>
-                    <p className="font-medium">{selectedQuote.client}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Date:</p>
-                    <p className="font-medium">{selectedQuote.date}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Total:</p>
-                    <p className="font-medium">{selectedQuote.total}</p>
-                  </div>
-                </div>
+            <div className="text-center py-16 border border-dashed border-gray-300 rounded-lg">
+              <div className="flex justify-center mb-4">
+                <FileText size={48} className="text-gray-400" />
               </div>
-            ) : (
-              <div className="text-center py-16 border border-dashed border-gray-300 rounded-lg">
-                <div className="flex justify-center mb-4">
-                  <FileText size={48} className="text-gray-400" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-700">No quote selected</h3>
-                <p className="text-gray-500 mt-2 mb-6">Search for a sales quote to generate a proposal.</p>
-                <button 
-                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded mx-auto hover:bg-blue-700"
-                  onClick={() => setIsSearchModalOpen(true)}
-                >
-                  <Search size={16} className="mr-1" />
-                  Search Quotes
-                </button>
-              </div>
-            )}
+              <h3 className="text-lg font-medium text-gray-700">No quote selected</h3>
+              <p className="text-gray-500 mt-2 mb-6">Search for a sales quote to generate a proposal.</p>
+              <button 
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded mx-auto hover:bg-blue-700"
+                onClick={() => setIsSearchModalOpen(true)}
+              >
+                <Search size={16} className="mr-1" />
+                Search Quotes
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Existing Proposals */}
-        <div className="bg-white rounded-lg shadow p-6">
+        
+          {/* Existing Proposals */}
+          <div className="bg-white rounded-lg shadow p-6">
           <div className="flex justify-between items-center mb-4">
             <div>
               <h2 className="text-lg font-semibold">Existing Proposals</h2>
@@ -687,41 +681,38 @@ export default function ProposalGenerationPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         proposal.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
+                      }`}> 
+
+
                         {proposal.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button 
-                          className="text-blue-600 hover:text-blue-900" 
-                          onClick={() => handleViewProposal(proposal)}
-                          title="View Proposal"
-                        >
-                          <Eye size={18} />
-                        </button>
-                        <button 
-                          className="text-blue-600 hover:text-blue-900" 
-                          onClick={() => handleDownloadProposal(proposal)}
-                          title="Download Proposal"
-                        >
-                          <Download size={18} />
-                        </button>
-                        <button 
-                          className="text-blue-600 hover:text-blue-900" 
-                          onClick={() => handleEditProposal(proposal)}
-                          title="Edit Proposal"
-                        >
-                          <FileText size={18} />
-                        </button>
-                      </div>
+                    </td>     
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <button
+                        onClick={() => handleViewProposal(proposal)}
+                        className="text-blue-600 hover:text-blue-800 mr-2"
+                      >
+                        <Eye size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDownloadProposal(proposal)}
+                        className="text-green-600 hover:text-green-800 mr-2"
+                      >
+                        <Download size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleEditProposal(proposal)}
+                        className="text-yellow-600 hover:text-yellow-800"
+                      >
+                        <Settings size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {filteredProposals.length === 0 && (
                   <tr>
                     <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
-                      No proposals found
+                      No proposals found matching "{proposalSearchQuery}"
                     </td>
                   </tr>
                 )}
@@ -729,9 +720,7 @@ export default function ProposalGenerationPage() {
             </table>
           </div>
         </div>
-      </main>
-
-      {/* Search Modal */}
+      </main> 
       <SearchModal />
     </div>
   );

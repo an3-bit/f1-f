@@ -1,6 +1,6 @@
 import React from 'react';
 import Panel from '../../../components/panel/Panel';
-import { useNavigate } from 'react-router-dom';
+
 import ClientSelection from '../assessment/ClientSelection';
 import OccupancyDetails from './occupancy';
 import WaterQualityAssesment from './waterquality';

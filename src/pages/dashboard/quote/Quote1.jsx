@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, FileText, User, Search, X, Trash } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ShoppingCart, Plus, FileText, User, Search, X, Loader,Trash } from 'lucide-react';
+import { Download, ArrowLeft, Printer } from 'lucide-react';
+import Nav from '../../../components/navbar/nav';
+
+
 
 export default function SalesQuotePage() {
+  const navigate = useNavigate();
   const [notes, setNotes] = useState('');
   const [clientSearch, setClientSearch] = useState('');
+  const [searchField, setSearchField] = useState('Name'); // Changed default to Name
   const [products, setProducts] = useState([]);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [productSearch, setProductSearch] = useState('');
@@ -18,33 +25,43 @@ export default function SalesQuotePage() {
   const [quoteCreated, setQuoteCreated] = useState(null);
   const [savingLineItems, setSavingLineItems] = useState(false);
   const [lineItemsStatus, setLineItemsStatus] = useState(null);
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
-  // Function to search for clients by phone number
-  const searchClient = async () => {
-    if (!clientSearch.trim()) return;
-    
+  // Function to search for clients by selected field
+  const searchClient = async (searchTerm) => {
+    if (!searchTerm.trim()) {
+      setSearchResults(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      // Make an API call to the specified endpoint
-      const response = await fetch(`http://127.0.0.1:8000/erp/Customer_Card/Phone_No/${encodeURIComponent(clientSearch)}`);
-      
+      // Make an API call to the specified endpoint with selected field
+      const response = await fetch(`http://127.0.0.1:8000/erp/Customer_Card/${searchField}/${encodeURIComponent(searchTerm)}`);
+
       if (!response.ok) {
         throw new Error(`API returned status ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data && data.value && data.value.length > 0) {
-        // Map the response data to our format
-        const clients = data.value.map(client => ({
-          No: client.No,
-          Name: client.Name,
-          Phone_No: client.Phone_No,
-          E_Mail: client.E_Mail
-        }));
-        
+        // Map the response data to our format and filter for "starts with" matches
+        const clients = data.value
+          .filter(client => {
+            const searchValue = searchTerm.toLowerCase();
+            const clientValue = String(client[searchField]).toLowerCase();
+            return clientValue.startsWith(searchValue);
+          })
+          .map(client => ({
+            No: client.No,
+            Name: client.Name,
+            Phone_No: client.Phone_No,
+            E_Mail: client.E_Mail
+          }));
+
         setSearchResults(clients);
       } else {
         // No results found
@@ -58,27 +75,59 @@ export default function SalesQuotePage() {
     }
   };
 
+  // Handle client search input change
+  const handleClientSearchChange = (e) => {
+    const value = e.target.value;
+    setClientSearch(value);
+
+    // Clear any existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set a new timeout to search after 300ms of no typing
+    const timeout = setTimeout(() => {
+      searchClient(value);
+    }, 300);
+
+    setSearchTimeout(timeout);
+  };
+
+  // Get placeholder text based on selected search field
+  const getSearchPlaceholder = () => {
+    switch (searchField) {
+      case 'Name':
+        return 'Enter client name (e.g., Annastacia)';
+      case 'Phone_No':
+        return 'Enter phone number (e.g., 254768372439)';
+      case 'No':
+        return 'Enter customer number (e.g., 132841)';
+      default:
+        return 'Search...';
+    }
+  };
+
   // Function to search for products
   const searchProduct = async () => {
     if (!productSearch.trim()) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       // Make an API call to the specified endpoint
       const response = await fetch(`http://127.0.0.1:8000/erp/products/number/${encodeURIComponent(productSearch)}`);
-      
+
       if (!response.ok) {
         throw new Error(`API returned status ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data && data.value && data.value.length > 0) {
         // Get the first product from the response
         const product = data.value[0];
-        
+
         // Extract only the fields we need
         const productData = {
           No: product.No,
@@ -89,7 +138,7 @@ export default function SalesQuotePage() {
           Retail_Price: product.Retail_Price,
           Standard_Cost: product.Standard_Cost
         };
-        
+
         setSelectedProduct(productData);
       } else {
         // No results found
@@ -104,6 +153,24 @@ export default function SalesQuotePage() {
     }
   };
 
+  // Handle product search input change
+  const handleProductSearchChange = (e) => {
+    const value = e.target.value;
+    setProductSearch(value);
+
+    // Clear any existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set a new timeout to search after 300ms of no typing
+    const timeout = setTimeout(() => {
+      searchProduct();
+    }, 300);
+
+    setSearchTimeout(timeout);
+  };
+
   // Function to add product to quote
   const addProductToQuote = () => {
     if (selectedProduct) {
@@ -112,7 +179,7 @@ export default function SalesQuotePage() {
         quantity: quantity,
         totalPrice: selectedProduct.Unit_Price * quantity
       };
-      
+
       setProducts([...products, newProduct]);
       setIsAddingProduct(false);
       setSelectedProduct(null);
@@ -145,7 +212,7 @@ export default function SalesQuotePage() {
   const saveQuoteLineItems = async (quoteNumber) => {
     setSavingLineItems(true);
     setLineItemsStatus({ success: 0, failed: 0, total: products.length });
-    
+
     try {
       const savedItems = await Promise.all(
         products.map(async (product) => {
@@ -156,7 +223,7 @@ export default function SalesQuotePage() {
             Quantity: product.quantity,
             No: product.No
           };
-          
+
           try {
             const response = await fetch('http://127.0.0.1:8000/erp/sales-quote-line', {
               method: 'POST',
@@ -165,12 +232,12 @@ export default function SalesQuotePage() {
               },
               body: JSON.stringify(lineItemData)
             });
-            
+
             if (!response.ok) {
               console.error(`Failed to save line item for product ${product.No}`);
               return { success: false, product: product.No };
             }
-            
+
             const data = await response.json();
             return { success: true, product: product.No, data };
           } catch (err) {
@@ -179,14 +246,14 @@ export default function SalesQuotePage() {
           }
         })
       );
-      
+
       const successCount = savedItems.filter(item => item.success).length;
       setLineItemsStatus({
         success: successCount,
         failed: products.length - successCount,
         total: products.length
       });
-      
+
       return successCount === products.length;
     } catch (err) {
       console.error('Error saving quote line items:', err);
@@ -199,10 +266,10 @@ export default function SalesQuotePage() {
   // Function to create quote
   const createQuote = async () => {
     if (!selectedClient || products.length === 0) return;
-    
+
     setIsCreatingQuote(true);
     setError(null);
-    
+
     try {
       // Prepare the quote data according to the API requirements
       const quoteData = {
@@ -211,7 +278,7 @@ export default function SalesQuotePage() {
         Responsibility_Center: "21010",
         Assigned_User_ID: "AKIOKO"
       };
-      
+
       // Send the data to the API endpoint
       const response = await fetch('http://127.0.0.1:8000/erp/sales-quote', {
         method: 'POST',
@@ -220,20 +287,20 @@ export default function SalesQuotePage() {
         },
         body: JSON.stringify(quoteData)
       });
-      
+
       if (!response.ok) {
         throw new Error(`API returned status ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       // Handle the successful response
       if (data && data.status === 'success') {
         setQuoteCreated(data.data);
-        
+
         // After quote is created, save the line items
         await saveQuoteLineItems(data.data.No);
-        
+
         console.log('Quote created successfully:', data);
       } else {
         throw new Error('Failed to create quote');
@@ -257,20 +324,20 @@ export default function SalesQuotePage() {
   // Render quote created success message
   const renderQuoteCreatedMessage = () => {
     if (!quoteCreated) return null;
-    
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 max-w-md w-full">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-bold text-gray-900">Quote Created Successfully</h3>
-            <button 
+            <button
               onClick={() => setQuoteCreated(null)}
               className="text-gray-400 hover:text-gray-600"
             >
               <X size={20} />
             </button>
           </div>
-          
+
           <div className="mb-4">
             <p className="text-green-600 font-medium mb-2">Your quote has been created successfully!</p>
             <div className="bg-gray-50 p-3 rounded border border-gray-200">
@@ -279,11 +346,11 @@ export default function SalesQuotePage() {
               <p className="text-sm mb-1"><span className="font-medium">Valid Until:</span> {new Date(quoteCreated.Quote_Valid_Until_Date).toLocaleDateString()}</p>
               <p className="text-sm"><span className="font-medium">Customer:</span> {quoteCreated.Sell_to_Customer_Name}</p>
             </div>
-            
+
             {lineItemsStatus && (
               <div className="mt-3">
                 <p className="text-sm">
-                  <span className="font-medium">Products added: </span> 
+                  <span className="font-medium">Products added: </span>
                   {lineItemsStatus.success} of {lineItemsStatus.total} successful
                   {lineItemsStatus.failed > 0 && (
                     <span className="text-orange-500"> ({lineItemsStatus.failed} failed)</span>
@@ -292,21 +359,69 @@ export default function SalesQuotePage() {
               </div>
             )}
           </div>
-          
+
           <div className="flex justify-end">
-            <button 
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500"
-              onClick={() => {
-                setQuoteCreated(null);
-                setProducts([]);
-                setSelectedClient(null);
-                setNotes('');
-                setLineItemsStatus(null);
-                // Additional actions could be added here, such as redirecting to a new page
-              }}
-            >
-              Continue
-            </button>
+<button 
+  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500"
+  onClick={async () => {
+    try {
+      setQuoteCreated({...quoteCreated, loading: true});
+      setError(null); // Clear previous errors
+      
+      // Prepare parameters
+      const params = new URLSearchParams();
+      params.append('product_number', products.length > 0 ? products[0].No : '');
+      params.append('phone_number', selectedClient?.Phone_No || '');
+      params.append('name', selectedClient?.Name || '');
+      
+      // Attempt to fetch quotation data
+      let quotationData = null;
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/erp/quotation?${params.toString()}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          quotationData = await response.json();
+        } else {
+          console.error('Quotation API error:', await response.text());
+        }
+      } catch (apiError) {
+        console.error('Failed to fetch quotation:', apiError);
+      }
+      
+      // Proceed with navigation even if quotation API fails
+      navigate('/proposal-template', {
+        state: {
+          quoteData: {
+            ...quoteCreated,
+            client: selectedClient,
+            products: products,
+            reference: quoteCreated.Reference,
+            quotationDetails: quotationData?.data || null,
+            apiError: quotationData ? null : 'Failed to load quotation details'
+           
+          }
+        }
+      });
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+      console.error('Continue error:', err);
+    } finally {
+      setQuoteCreated({...quoteCreated, loading: false});
+    }
+  }}
+>
+  {quoteCreated.loading ? (
+    <div className="text-center">
+    <Loader className="animate-spin mx-auto mb-4" size={48} />
+    <p className="text-lg font-medium">Generating your proposal...</p>
+  </div>
+  ) : 'Continue'}
+</button>
           </div>
         </div>
       </div>
@@ -315,49 +430,8 @@ export default function SalesQuotePage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="text-orange-500 mr-2">
-              <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center">
-                <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-              </div>
-            </div>
-            <span className="font-bold text-lg">AI Solar Water Assistant</span>
-          </div>
-          
-          <nav className="flex items-center space-x-4">
-            <a 
-              href="/assessment-dashboard" 
-              className="px-3 py-2 text-gray-600 hover:text-gray-900 flex items-center"
-            >
-              <span>Triage & Sizing</span>
-            </a>
-            <a 
-              href="/assessment-dashboard" 
-              className="px-3 py-2 text-gray-600 hover:text-gray-900 flex items-center"
-            >
-              <span>Future Expansion</span>
-            </a>
-            <a 
-              href="/quote1" 
-              className="px-3 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 flex items-center"
-            >
-              <span>Sales Quote</span>
-            </a>
-            <a 
-              href="/proposal-generation" 
-              className="px-3 py-2 text-gray-600 hover:text-gray-900 flex items-center"
-            >
-              <span>Proposals</span>
-            </a>
-          </nav>
-          <div className="flex items-center">
-            <span className="text-gray-700">John Doe</span>
-          </div>
-        </div>
-      </header>
+
+      <Nav />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 flex-grow">
@@ -372,7 +446,7 @@ export default function SalesQuotePage() {
             <div className="bg-white rounded-lg shadow p-6 mb-6">
               <h2 className="text-lg font-semibold mb-1">Client Information</h2>
               <p className="text-gray-600 text-sm mb-4">Select the client for this quote</p>
-              
+
               {selectedClient ? (
                 <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
                   <div className="flex justify-between">
@@ -384,7 +458,7 @@ export default function SalesQuotePage() {
                         <p className="text-gray-600 text-sm">Email: {selectedClient.E_Mail}</p>
                       )}
                     </div>
-                    <button 
+                    <button
                       onClick={() => setSelectedClient(null)}
                       className="text-gray-400 hover:text-gray-600"
                     >
@@ -395,30 +469,37 @@ export default function SalesQuotePage() {
               ) : (
                 <div>
                   <div className="flex mb-2">
-                    <input 
-                      type="text" 
-                      className="flex-grow px-3 py-2 border border-gray-300 rounded-l-md" 
-                      placeholder="Search by phone number (e.g., 254768372439)"
+                    <select
+                      value={searchField}
+                      onChange={(e) => setSearchField(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-l-md bg-white"
+                    >
+                      <option value="Name">Search by Name</option>
+                      <option value="Phone_No">Search by Phone Number</option>
+                      <option value="No">Search by Customer Number</option>
+                    </select>
+                    <input
+                      type="text"
+                      className="flex-grow px-3 py-2 border-t border-b border-gray-300"
+                      placeholder={getSearchPlaceholder()}
                       value={clientSearch}
-                      onChange={(e) => setClientSearch(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && searchClient()}
+                      onChange={handleClientSearchChange}
                     />
-                    <button 
+                    <button
                       className="px-4 py-2 bg-gray-700 text-white rounded-r-md hover:bg-gray-600 flex items-center"
-                      onClick={searchClient}
                       disabled={loading}
                     >
                       {loading ? 'Searching...' : <Search size={18} />}
                     </button>
                   </div>
-                  
+
                   {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-                  
+
                   {searchResults && searchResults.length > 0 ? (
                     <div className="mt-3 border border-gray-200 rounded-md">
                       {searchResults.map((client, index) => (
-                        <div 
-                          key={index} 
+                        <div
+                          key={index}
                           className={`p-3 hover:bg-gray-50 cursor-pointer ${index > 0 ? 'border-t border-gray-200' : ''}`}
                           onClick={() => selectClient(client)}
                         >
@@ -429,7 +510,7 @@ export default function SalesQuotePage() {
                       ))}
                     </div>
                   ) : searchResults && searchResults.length === 0 ? (
-                    <p className="text-gray-500 mt-2">No clients found with that phone number</p>
+                    <p className="text-gray-500 mt-2">No clients found with that {searchField.toLowerCase()}</p>
                   ) : null}
                 </div>
               )}
@@ -441,11 +522,11 @@ export default function SalesQuotePage() {
             <div className="bg-white rounded-lg shadow p-6 mb-6">
               <h2 className="text-lg font-semibold mb-1">Quote Details</h2>
               <p className="text-gray-600 text-sm mb-4">Reference and notes</p>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md h-32" 
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md h-32"
                   placeholder="Add any additional notes here..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -462,7 +543,7 @@ export default function SalesQuotePage() {
               <h2 className="text-lg font-semibold">Quote Items</h2>
               <p className="text-gray-600 text-sm">Add products to your quote</p>
             </div>
-            <button 
+            <button
               className="flex items-center px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800"
               onClick={() => setIsAddingProduct(true)}
               disabled={isAddingProduct}
@@ -476,7 +557,7 @@ export default function SalesQuotePage() {
             <div className="mb-6 p-4 border border-gray-300 rounded-lg bg-gray-50">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-medium">Add Product</h3>
-                <button 
+                <button
                   onClick={() => {
                     setIsAddingProduct(false);
                     setSelectedProduct(null);
@@ -487,17 +568,17 @@ export default function SalesQuotePage() {
                   <X size={20} />
                 </button>
               </div>
-              
+
               <div className="flex mb-3">
-                <input 
-                  type="text" 
-                  className="flex-grow px-3 py-2 border border-gray-300 rounded-l-md" 
+                <input
+                  type="text"
+                  className="flex-grow px-3 py-2 border border-gray-300 rounded-l-md"
                   placeholder="Search by product number (e.g., DSD200)"
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && searchProduct()}
                 />
-                <button 
+                <button
                   className="px-4 py-2 bg-gray-700 text-white rounded-r-md hover:bg-gray-600 flex items-center"
                   onClick={searchProduct}
                   disabled={loading}
@@ -505,9 +586,9 @@ export default function SalesQuotePage() {
                   {loading ? 'Searching...' : <Search size={18} />}
                 </button>
               </div>
-              
+
               {error && <p className="text-red-500 text-sm mt-1 mb-2">{error}</p>}
-              
+
               {selectedProduct && (
                 <div className="mt-2 mb-3">
                   <div className="bg-white p-3 border border-gray-200 rounded-md">
@@ -520,21 +601,21 @@ export default function SalesQuotePage() {
                       <p>Retail Price: <span className="font-medium">{formatCurrency(selectedProduct.Retail_Price)}</span></p>
                       <p>Standard Cost: <span className="font-medium">{formatCurrency(selectedProduct.Standard_Cost)}</span></p>
                     </div>
-                    
+
                     <div className="mt-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                      <input 
-                        type="number" 
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md" 
+                      <input
+                        type="number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
                         value={quantity}
                         min="1"
                         onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
                       />
                     </div>
                   </div>
-                  
+
                   <div className="mt-3 flex justify-end">
-                    <button 
+                    <button
                       className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500"
                       onClick={addProductToQuote}
                     >
@@ -553,7 +634,7 @@ export default function SalesQuotePage() {
               </div>
               <h3 className="text-lg font-medium text-gray-700">No products added yet</h3>
               <p className="text-gray-500 mt-2 mb-6">Click the "Add Product" button to search for products and add them to your quote.</p>
-              <button 
+              <button
                 className="flex items-center px-4 py-2 bg-gray-800 text-white rounded mx-auto hover:bg-gray-700"
                 onClick={() => setIsAddingProduct(true)}
               >
@@ -595,7 +676,7 @@ export default function SalesQuotePage() {
                           <div className="text-sm font-medium text-gray-900">{formatCurrency(product.totalPrice)}</div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right">
-                          <button 
+                          <button
                             className="text-red-500 hover:text-red-700"
                             onClick={() => removeProduct(index)}
                           >
@@ -621,7 +702,7 @@ export default function SalesQuotePage() {
             <button className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50">
               Save as Draft
             </button>
-            <button 
+            <button
               className="flex items-center px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
               disabled={!selectedClient || products.length === 0 || isCreatingQuote || savingLineItems}
               onClick={createQuote}
