@@ -48,7 +48,7 @@ const AuthPage = () => {
       }
 
       // Request verification code
-      await axios.post('/api/sales-engineer/login', {
+      await axios.post('/sales-engineer/login', {
         email: formData.email,
       });
 
