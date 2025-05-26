@@ -6,7 +6,7 @@ import axios from 'axios';
 import Logo from '../../assets/logo.png';
 import { ApiDomain } from '../../utilis/ApiDomain';
 
-axios.defaults.baseURL = ApiDomain;
+axios.defaults.baseURL = "https://f1-backend-t9zk.onrender.com/api";
 
 const AuthPage = () => {
   const [loading, setLoading] = useState(false);
