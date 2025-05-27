@@ -144,7 +144,7 @@ const Quest = () => {
     try {
       setSolarLoading(true); // Set solar loading to true
       setSolarRadiation(null); // Reset previous data
-      const res = await fetch(`https://f1-backend-t9zk.onrender.com/api/solar/radiation?location=${encodeURIComponent(location)}`);
+      const res = await fetch(`/solar/radiation?location=${encodeURIComponent(location)}`);
       if (res.ok) {
         const data = await res.json();
         // Get the annual average from the response
@@ -244,7 +244,7 @@ const Quest = () => {
     try {
       console.log("Submitting answers:", apiPayload);
       
-      const response = await fetch('/api/recommend', { 
+      const response = await fetch('/recommend', { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
